@@ -1,52 +1,93 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox, simpledialog
 import subprocess
 import os
+import getpass
+
+# Git command runner
+def run_git_command(command, cwd):
+    print(f"🔄 Running: {command}")
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.stdout.strip():
+            print(f"✅ {result.stdout.strip()}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error: {e.stderr}")
+        return False
+
+# First push routine
+def push_to_git(project_path, repo_url):
+    if not os.path.exists(project_path):
+        print(f"❌ Directory {project_path} not found")
+        return False
+
+    use_pat = input("🔑 Use Personal Access Token (PAT)? [y/N]: ").strip().lower() == "y"
+    if use_pat:
+        pat = getpass.getpass("🔐 Enter your PAT: ").strip()
+        if repo_url.startswith("https://"):
+            repo_url = repo_url.replace("https://", f"https://:{pat}@")
+        else:
+            print("❌ PAT can only be used with HTTPS URLs.")
+            return False
+
+    commands = [
+        ["git", "init"],
+        ["git", "add", "."],
+        ["git", "commit", "-m", "Initial commit"],
+        ["git", "remote", "add", "origin", repo_url],
+        ["git", "branch", "-M", "main"],
+        ["git", "push", "--force", "origin", "HEAD:main"]
+    ]
+
+    os.chdir(project_path)
+
+    for cmd in commands:
+        if not run_git_command(cmd, project_path):
+            return False
+
+    print("🎉 Code successfully pushed to remote repository!")
+    return True
 
 class GitGUIApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Git Automation GUI")
-        self.geometry("900x550")
-        self.resizable(True, True)
+        self.geometry("800x350")
+        self.resizable(False, False)
 
+        # Project directory entry
         tk.Label(self, text="Project Directory:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.path_entry = tk.Entry(self, width=60)
         self.path_entry.grid(row=0, column=1, padx=5, pady=5)
         self._add_entry_menu(self.path_entry)
         tk.Button(self, text="Browse…", command=self.browse_folder, bg="#e0e0e0").grid(row=0, column=2, padx=5)
 
+        # Repository URL entry
         tk.Label(self, text="Repository URL:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         self.url_entry = tk.Entry(self, width=60)
         self.url_entry.grid(row=1, column=1, padx=5, pady=5)
         self._add_entry_menu(self.url_entry)
 
-        btn_frame = tk.Frame(self, bg="#f0f0f0")
-        btn_frame.grid(row=2, column=0, columnspan=3, pady=10, sticky="ew")
-        for i in range(8):
+        # Buttons frame
+        btn_frame = tk.Frame(self)
+        btn_frame.grid(row=2, column=0, columnspan=3, pady=15, sticky="ew")
+        for i in range(6):
             btn_frame.grid_columnconfigure(i, weight=1)
 
-        tk.Button(btn_frame, text="Clone",        width=12, command=self.clone_repo, bg="#dda0dd").grid(row=0, column=0, padx=3)
-        tk.Button(btn_frame, text="Status",       width=12, command=lambda: self._run_simple("status"), bg="#add8e6").grid(row=0, column=1, padx=3)
-        tk.Button(btn_frame, text="Fetch",        width=12, command=lambda: self._run_simple("fetch"),  bg="#e0ffff").grid(row=0, column=2, padx=3)
-        tk.Button(btn_frame, text="Pull",         width=12, command=lambda: self._run_simple("pull"),   bg="#fffacd").grid(row=0, column=3, padx=3)
-        tk.Button(btn_frame, text="Push",         width=12, command=self._push_only,                 bg="#98fb98").grid(row=0, column=4, padx=3)
-
-        tk.Label(btn_frame, text="Commit Msg:", bg="#f0f0f0").grid(row=0, column=5, padx=(20,3))
-        self.commit_entry = tk.Entry(btn_frame, width=30)
-        self.commit_entry.grid(row=0, column=6, padx=3)
-        tk.Button(btn_frame, text="Commit", width=12, command=self._add_and_commit, bg="#ffb347").grid(row=0, column=7, padx=3)
-
-        self.output = tk.Text(self, height=15, state="disabled")
-        self.output.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=5, pady=5)
-        self.grid_rowconfigure(3, weight=1)
-        scrollbar = tk.Scrollbar(self, command=self.output.yview)
-        scrollbar.grid(row=3, column=3, sticky='ns')
-        self.output['yscrollcommand'] = scrollbar.set
-
-        self.output.tag_configure('success', foreground='green')
-        self.output.tag_configure('error',   foreground='red')
-        self.output.tag_configure('info',    foreground='blue')
+        tk.Button(btn_frame, text="Clone",       width=12, command=self.clone_repo,  bg="#dda0dd").grid(row=0, column=0, padx=3)
+        tk.Button(btn_frame, text="Get Status",  width=12, command=self.get_status,  bg="#add8e6").grid(row=0, column=1, padx=3)
+        tk.Button(btn_frame, text="Add",         width=12, command=self.add_only,    bg="#e0ffff").grid(row=0, column=2, padx=3)
+        tk.Button(btn_frame, text="Commit",      width=12, command=self.commit_only, bg="#ffb347").grid(row=0, column=3, padx=3)
+        tk.Button(btn_frame, text="Push",        width=12, command=self.push_only,   bg="#98fb98").grid(row=0, column=4, padx=3)
+        tk.Button(btn_frame, text="First Push",  width=12, command=self.first_push,  bg="#ffa07a").grid(row=0, column=5, padx=3)
 
     def _add_entry_menu(self, entry):
         menu = tk.Menu(entry, tearoff=0)
@@ -65,7 +106,8 @@ class GitGUIApp(tk.Tk):
     def _paste_entry(self, entry):
         try:
             txt = self.clipboard_get()
-            entry.insert(tk.INSERT, txt)
+            entry.delete(0, tk.END)
+            entry.insert(0, txt)
         except tk.TclError:
             pass
 
@@ -75,106 +117,82 @@ class GitGUIApp(tk.Tk):
             self.path_entry.delete(0, tk.END)
             self.path_entry.insert(0, d)
 
-    def _clear_log(self):
-        self.output.configure(state="normal")
-        self.output.delete("1.0", "end")
-        self.output.configure(state="disabled")
-
-    def _append_log(self, msg, tag='info'):
-        self.output.configure(state="normal")
-        self.output.insert("end", msg + "\n", tag)
-        self.output.see("end")
-        self.output.configure(state="disabled")
-
-    def _run_git(self, args, cwd=None):
-        cwd = cwd or self.path_entry.get().strip()
-        try:
-            proc = subprocess.run(
-                ["git"] + args,
-                cwd=cwd,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            return True, proc.stdout.strip()
-        except subprocess.CalledProcessError as e:
-            return False, (e.stderr.strip() or e.stdout.strip())
-
-    def _run_simple(self, subcmd):
-        path = self.path_entry.get().strip()
-        if not os.path.isdir(path):
-            messagebox.showerror("Error", f"Directory not found:\n{path}")
-            return
-        self._clear_log()
-        ok, out = self._run_git([subcmd])
-        tag = 'success' if ok else 'error'
-        self._append_log(f"git {subcmd}: {out}", tag)
-
-    def _add_and_commit(self):
-        path = self.path_entry.get().strip()
-        if not os.path.isdir(path):
-            messagebox.showerror("Error", f"Directory not found:\n{path}")
-            return
-        msg = self.commit_entry.get().strip()
-        if not msg:
-            messagebox.showwarning("Warning", "Enter commit message first.")
-            return
-        #add
-        ok_add, out_add = self._run_git(["add", "."])
-        tag_add = 'success' if ok_add else 'error'
-        self._append_log(f"git add .: {out_add}", tag_add)
-        if not ok_add:
-            return
-
-        self._clear_log()
-        #commit
-        ok, out = self._run_git(["commit", "-m", msg])
-        tag = 'success' if ok else 'error'
-        self._append_log(f"git commit: {out}", tag)
-
-    def _push_only(self):
-        path = self.path_entry.get().strip()
-        url  = self.url_entry.get().strip()
-        if not os.path.isdir(path):
-            messagebox.showerror("Error", f"Directory not found:\n{path}")
-            return
-        self._clear_log()
-        if not url:
-            url = simpledialog.askstring("Repository URL", "Enter remote repository URL:")
-            if not url:
-                return
-            self.url_entry.insert(0, url)
-        ok, _ = self._run_git(["remote", "get-url", "origin"])
-        if not ok:
-            ok2, out2 = self._run_git(["remote", "add", "origin", url])
-            tag2 = 'success' if ok2 else 'error'
-            self._append_log(f"git remote add origin: {out2}", tag2)
-        ok3, out3 = self._run_git(["push", "origin", "main"])
-        tag3 = 'success' if ok3 else 'error'
-        self._append_log(f"git push: {out3}", tag3)
-
     def clone_repo(self):
         url = self.url_entry.get().strip()
         if not url:
-            url = simpledialog.askstring("Repository URL", "Enter repo URL to clone:")
+            url = simpledialog.askstring("Clone", "Enter repository URL:")
             if not url:
                 return
             self.url_entry.insert(0, url)
         parent = filedialog.askdirectory(title="Select parent folder for clone")
         if not parent:
             return
-        self._clear_log()
-        ok, out = self._run_git(["clone", url], cwd=parent)
-        tag = 'success' if ok else 'error'
-        self._append_log(f"git clone: {out}", tag)
+        run_git_command(["git", "clone", url], cwd=parent)
+        name = os.path.splitext(os.path.basename(url))[0]
+        clone_path = os.path.join(parent, name)
+        self.path_entry.delete(0, tk.END)
+        self.path_entry.insert(0, clone_path)
+        messagebox.showinfo("Clone", f"Cloned into:\n{clone_path}")
+
+    def get_status(self):
+        path = self.path_entry.get().strip()
+        if not os.path.isdir(path):
+            messagebox.showerror("Error", f"Directory not found:\n{path}")
+            return
+        run_git_command(["git", "status"], cwd=path)
+
+    def add_only(self):
+        path = self.path_entry.get().strip()
+        if not os.path.isdir(path):
+            messagebox.showerror("Error", f"Directory not found:\n{path}")
+            return
+        run_git_command(["git", "add", "."], cwd=path)
+        messagebox.showinfo("Add", "git add . completed")
+
+    def commit_only(self):
+        path = self.path_entry.get().strip()
+        if not os.path.isdir(path):
+            messagebox.showerror("Error", f"Directory not found:\n{path}")
+            return
+        msg = simpledialog.askstring("Commit", "Enter commit message:")
+        if not msg:
+            return
+        run_git_command(["git", "add", "."], cwd=path)
+        ok = run_git_command(["git", "commit", "-m", msg], cwd=path)
         if ok:
-            name = os.path.splitext(os.path.basename(url))[0]
-            clone_path = os.path.join(parent, name)
-            self.path_entry.delete(0, tk.END)
-            self.path_entry.insert(0, clone_path)
-            self._append_log(f"✅ Cloned into: {clone_path}", 'success')
+            messagebox.showinfo("Commit", "git commit completed")
+        else:
+            messagebox.showerror("Commit failed", "Check console for details")
+
+    def push_only(self):
+        path = self.path_entry.get().strip()
+        if not os.path.isdir(path):
+            messagebox.showerror("Error", f"Directory not found:\n{path}")
+            return
+        url = self.url_entry.get().strip()
+        ok = run_git_command(["git", "remote", "get-url", "origin"], cwd=path)
+        if not ok and url:
+            run_git_command(["git", "remote", "add", "origin", url], cwd=path)
+        run_git_command(["git", "push", "origin", "main"], cwd=path)
+        messagebox.showinfo("Push", "git push completed")
+
+    def first_push(self):
+        path = self.path_entry.get().strip()
+        url  = self.url_entry.get().strip()
+        if not path or not url:
+            messagebox.showwarning("Missing data", "Ensure both path and URL are filled")
+            return
+        success = push_to_git(path, url)
+        if success:
+            messagebox.showinfo("First Push", "First push completed successfully")
+        else:
+            messagebox.showerror("First Push failed", "Check console for details")
 
 if __name__ == "__main__":
     app = GitGUIApp()
     app.mainloop()
+
+
+#C:\Users\97254\PycharmProjects\automate_connect_to_remote_repository_first_time
+
+#https://github.com/ShayShuve123/automatically_push_to_git.git
