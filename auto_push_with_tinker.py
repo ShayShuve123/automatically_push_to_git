@@ -100,7 +100,7 @@ class GitGUIApp(tk.Tk):
 
         for cmd in commands:
             if not self.run_git_command(cmd, project_path):
-                self.log("❌ Push process aborted due to error.")
+                self.log("❌ Push process aborted due to error.❌")
                 return
 
         self.log("🎉 Code successfully pushed to remote repository!")
